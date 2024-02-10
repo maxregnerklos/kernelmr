@@ -116,8 +116,8 @@ sleep 2
 BUILD_OPTS="SELINUX_DEFCON_0=y"
 
 # Build command
-make "${BUILD_OPTS}" pdx225_defconfig
-make -j$(nproc --all) 2>&1 | sed 's/^/  /' | tee -a "${LOG_FILE}"
+make -i "${BUILD_OPTS}" pdx225_defconfig
+make -i -j$(nproc --all) 2>&1 | sed 's/^/  /' | tee -a "${LOG_FILE}"
 
 # Check if the build was successful
 if [[ $? -eq 0 ]]; then
