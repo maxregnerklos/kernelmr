@@ -1,0 +1,35 @@
+name: Build Sony Xperia 10 IV Kernel
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build_kernel:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      
+    - name: Set up build environment
+      run: |
+        sudo apt update
+        sudo apt install -y git make gcc libc-dev libssl-dev bc python3
+        
+        # Install dependencies as needed
+        
+    - name: Build kernel
+      run: |
+        git clone https://github.com/<your_username>/<your_repository>.git /tmp/kernel_build
+        cd /tmp/kernel_build
+        bash build.sh -d sony-xperia-10-iv -v pdx225_defconfig
+        
+    - name: Upload kernel artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: kernel
+        path: /tmp/kernel_build/output/*.zip
