@@ -1,0 +1,33 @@
+name: Upstream Kernel and Save Artifact
+
+on:
+  workflow_dispatch:
+
+jobs:
+  upstream-and-zip:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Set up Environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip  # Install zip if not present
+
+      - name: Pull Latest Upstream Changes
+        run: |
+          git fetch origin
+          git checkout -b upstream-changes origin/main  # Replace 'main' with the branch you want to pull from
+          git pull
+
+      - name: Zip Kernel Source
+        run: |
+          zip -r kernel-upstreamed.zip .  # Zip the entire repository
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: kernel-upstreamed
+          path: kernel-upstreamed.zip
