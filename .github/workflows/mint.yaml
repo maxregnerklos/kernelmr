@@ -1,35 +1,109 @@
-name: Build Sony Xperia 10 IV Kernel
+name: Kernel Build
 
 on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
 
 jobs:
-  build_kernel:
+  build:
+    name: Build Kernel
     runs-on: ubuntu-latest
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
-      
-    - name: Set up build environment
-      run: |
-        sudo apt update
-        sudo apt install -y git make gcc libc-dev libssl-dev bc python3
-        
-        # Install dependencies as needed
-        
-    - name: Build kernel
-      run: |
-        git clone https://github.com/maxregnerklos/kernelmr /tmp/kernel_build
-        cd /tmp/kernel_build
-        bash build.sh
-        
-    - name: Upload kernel artifact
-      uses: actions/upload-artifact@v2
-      with:
-        name: kernel
-        path: /tmp/kernel_build/output/*.zip
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      # Setting up the environment
+      - name: Set up environment variables
+        run: |
+          export ORIGIN_DIR=$(pwd)
+          export CURRENT_BUILD_USER=$(whoami)
+          export BUILD_PREF_COMPILER='clang'
+          export BUILD_PREF_COMPILER_VERSION='proton'
+          export TOOLCHAIN=$HOME/toolchains/exynos9610_toolchains_fresh
+          export TOOLCHAIN_EXT=$(pwd)/toolchain
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export ANDROID_MAJOR_VERSION=r
+          export PLATFORM_VERSION=11.0.0
+          export $ARCH
+
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+          export CC=${BUILD_PREF_COMPILER}
+
+      # Install Git
+      - name: Install Git
+        run: sudo apt-get install -y git
+
+      # Downloading the toolchain
+      - name: Download Toolchain
+        run: |
+          git clone https://gitlab.com/TenSeventy7/exynos9610_toolchains_fresh.git ${TOOLCHAIN_EXT} --single-branch -b ${BUILD_PREF_COMPILER_VERSION} --depth 1
+          sleep 2
+          if [[ ! -d "${TOOLCHAIN}" ]]; then
+            echo "I: Toolchain not found at default location or repository root"
+            echo "   Downloading recommended toolchain at ${TOOLCHAIN_EXT}..."
+            sleep 2
+            cd ${TOOLCHAIN_EXT}
+            git pull
+            cd ${ORIGIN_DIR}
+            export PATH="${TOOLCHAIN_EXT}/bin:$PATH"
+            export LD_LIBRARY_PATH="${TOOLCHAIN_EXT}/lib:$LD_LIBRARY_PATH"
+            if [[ ${BUILD_KERNEL_CI} == 'true' ]]; then
+              if [[ ${BUILD_PREF_COMPILER_VERSION} == 'proton' ]]; then
+                sudo mkdir -p /root/build/install/aarch64-linux-gnu
+                sudo cp -r "${TOOLCHAIN_EXT}/lib" /root/build/install/aarch64-linux-gnu/
+                sudo chown ${CURRENT_BUILD_USER} /root /root/build /root/build/install /root/build/install/aarch64-linux-gnu /root/build/install/aarch64-linux-gnu/lib
+              fi
+            fi
+          else
+            echo "I: Toolchain found at default location"
+            export PATH="${TOOLCHAIN}/bin:$PATH"
+            export LD_LIBRARY_PATH="${TOOLCHAIN}/lib:$LD_LIBRARY_PATH"
+          fi
+
+      # Set Android Version
+      - name: Set Android Version
+        run: echo "CONFIG_MINT_PLATFORM_VERSION=${ANDROID_MAJOR_VERSION}" >> "${ORIGIN_DIR}/.config/${BUILD_DEVICE_TMP_CONFIG}"
+
+      # Check Defconfig
+      - name: Check Defconfig
+        run: |
+          if [[ ! -e "${ORIGIN_DIR}/.config/${BUILD_DEVICE_CONFIG}" ]]; then
+            echo "E: Defconfig not found!"
+            echo "${ORIGIN_DIR}/.config/${BUILD_DEVICE_CONFIG}"
+            echo "Make sure it is in the proper directory."
+            echo ""
+            exit 1
+          else
+            echo "$(cat "${ORIGIN_DIR}/.config/${BUILD_DEVICE_CONFIG}")" > "${ORIGIN_DIR}/.config/${BUILD_DEVICE_TMP_CONFIG}"
+          fi
+
+      # Build Kernel
+      - name: Build Kernel
+        run: |
+          if [[ ${BUILD_PREF_COMPILER_VERSION} == 'rui' ]]; then
+            make -C $(pwd) CC=${BUILD_PREF_COMPILER} LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip ${BUILD_DEVICE_TMP_CONFIG} LOCALVERSION="${LOCALVERSION}" && \
+            make -C $(pwd) CC=${BUILD_PREF_COMPILER} LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip -j$(nproc --all) LOCALVERSION="${LOCALVERSION}"
+          elif [[ ${BUILD_PREF_COMPILER_VERSION} == 'proton' ]]; then
+            make -C $(pwd) CC=${BUILD_PREF_COMPILER} HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip ${BUILD_DEVICE_TMP_CONFIG} LOCALVERSION="${LOCALVERSION}" && \
+            make -C $(pwd) CC=${BUILD_PREF_COMPILER} HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip -j$(nproc --all) LOCALVERSION="${LOCALVERSION}"
+          fi
+
+      # Clean Files
+      - name: Clean Files
+        run: |
+          if [[ ${BUILD_PREF_COMPILER_VERSION} == 'rui' ]]; then
+            make -C $(pwd) clean mrproper ${BUILD_DEVICE_TMP_CONFIG} LOCALVERSION="${LOCALVERSION}"
+          elif [[ ${BUILD_PREF_COMPILER_VERSION} == 'proton' ]]; then
+            make -C $(pwd) clean mrproper ${BUILD_DEVICE_TMP_CONFIG} LOCALVERSION="${LOCALVERSION}"
+          fi
+
+      # Upload Build Result
+      - name: Upload Build Result
+        uses: actions/upload-artifact@v2
+        with:
+          name: kernel
+          path: ${{ github.workspace }}/path/to/kernel # Adjust the path to the actual location of the kernel build result
